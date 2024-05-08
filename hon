@@ -34,7 +34,13 @@ case "$1" in
   # Add book with current page
   "a")
     read -p "Book Title: " title
+    if [[ -z $title ]]; then
+        exit 0
+    fi
     read -p "Total Pages: " total_pages
+    if [[ -z $total_pages ]]; then
+        exit 0
+    fi
     read -p "Current Page (default 0): " current_page
     current_page=${current_page:-0}
     if [[ $current_page -ge $total_pages ]] ; then
@@ -67,6 +73,9 @@ case "$1" in
     total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
     if [[ ! -z "$book_id" ]]; then
       read -p "New Current Page: " new_page
+      if [[ -z $new_page ]]; then
+          exit 0
+      fi
       if [[ $new_page -lt $current_page ]] || [[ $new_page -ge $total_pages ]] ; then
         read -p "You're setting the bookmark weird. Are you sure you want to continue? (y/N): " confirmation
         if [[ "$confirmation" =~ ^[Yy]$ ]]; then
@@ -160,6 +169,9 @@ case "$1" in
             zathura --page=$current_page "$book_path" &
             wait $!
             read -p "New Current Page: " new_page
+            if [[ -z $new_page ]]; then
+                exit 0
+            fi
             if [[ $new_page -lt $current_page ]] || [[ $new_page -ge $total_pages ]] ; then
                 read -p "You're setting the bookmark weird. Are you sure you want to continue? (y/N): " confirmation
                 if [[ "$confirmation" =~ ^[Yy]$ ]]; then
@@ -211,6 +223,9 @@ case "$1" in
     fi
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
     read -p "New Book Title: " new_title
+    if [[ -z $new_title ]]; then
+        exit 0
+    fi
     if sq_exec "UPDATE books SET title = '$new_title' WHERE id = $book_id;" 2>/dev/null; then
       echo "The title for book ${bold}$book_name${normal} updated - ${bold}$new_title${normal}!"
     else
