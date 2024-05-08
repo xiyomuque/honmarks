@@ -42,7 +42,7 @@ case "$1" in
       :
     fi
     sq_exec "INSERT INTO books (title, total_pages, current_page) VALUES ('$title', $total_pages, $current_page);"
-    book_id=$(sq_exec "SELECT last_insert_rowid();")
+    book_id=$(sq_exec "SELECT seq FROM sqlite_sequence WHERE name='books';")
     sq_exec "UPDATE books SET last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;"
     echo "Book '$title' added!"
     ;;
@@ -73,7 +73,7 @@ case "$1" in
     ;;
   # Delete a book (using fzf)
   "dd")
-    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
