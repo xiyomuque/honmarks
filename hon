@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+script_dir=$(dirname "$0")
+
+# Database file path (modify as needed)
+DB_FILE="$script_dir/my_books.db"
+
+# Function to check if sqlite3 command is available
+function check_sqlite3() {
+  if ! command -v sqlite3 &> /dev/null; then
+    echo "Error: sqlite3 command not found. Please install sqlite3."
+    exit 1
+  fi
+}
+
+# Function to execute a SQL query
+function sq_exec() {
+  local sql="$1"
+  sqlite3 "$DB_FILE" <<< "$sql"
+}
+
+# Main program logic
+check_sqlite3
+
+case "$1" in
+  # Add book with current page
+  "a")
+    read -p "Book Title: " title
+    read -p "Total Pages: " total_pages
+    read -p "Current Page (default 0): " current_page
+    current_page=${current_page:-0}
+    sq_exec "INSERT INTO books (title, total_pages, current_page) VALUES ('$title', $total_pages, $current_page);"
+    echo "Book '$title' added!"
+    ;;
+  # Set a bookmark for the book (using fzf)
+  "b")
+    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
+    current_page=$(sq_exec "SELECT current_page FROM books WHERE title = '$book_name';" | awk '{print $1}')
+    if [[ ! -z "$book_id" ]]; then
+      read -p "New Current Page: " new_page
+      if [[ $new_page -lt $current_page ]]; then
+        read -p "You're setting the bookmark backwards. Are you sure you want to continue? (y/N): " confirmation
+        if [[ "$confirmation" =~ ^[Yy]$ ]]; then
+          :
+        else
+          exit 0
+        fi
+      else
+          :
+      fi
+      sq_exec "UPDATE books SET current_page = $new_page WHERE id = $book_id;"
+      echo "Current page for $book_name updated!"
+    fi
+    ;;
+  # Delete a book (using fzf)
+  "dd")
+    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
+    if [[ ! -z "$book_id" ]]; then
+      read -p "New Current Page: " new_page
+      if [[ $new_page -lt $current_page ]]; then
+        read -p "You're deleting the book from the database. Are you sure you want to continue? (y/N): " confirmation
+        if [[ "$confirmation" =~ ^[Yy]$ ]]; then
+          :
+        else
+          exit 0
+        fi
+      else
+          :
+      fi
+      sq_exec "DELETE FROM books WHERE id = $book_id;"
+      echo "$book_name has been dropped from library!"
+    fi
+    ;;
+  # Complete book (set current page to total pages) using fzf
+  "c")
+    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
+    if [[ ! -z "$book_id" ]]; then
+      sq_exec "UPDATE books SET current_page = total_pages WHERE id = $book_id;"
+      echo "$book_name is finished!"
+    fi
+    ;;
+  # Find book and show current page using fzf
+  "f")
+    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
+    if [[ ! -z "$book_id" ]]; then
+      current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id;")
+      echo "You are currently on page $current_page of $book_name."
+    fi
+    ;;
+  # Display your library with progress information
+  "l")
+    output=$(sq_exec "SELECT id, title, current_page, total_pages FROM books;")
+    while IFS='|' read -r id title current_page total_pages; do
+      percent=$(echo "scale=2; 100 * $current_page / $total_pages" | bc)
+      echo "$title (Page $current_page/$total_pages - $percent% read)"
+    done <<< "$output"  # Redirect captured output to the loop
+    ;;
+  *)
+      echo "Invalid argument. Usage: hon (a(add a book)|b(update a bookmark)|c(complete the book)|f(find current bookmark for the book)|l(display your library)"
+    ;;
+esac

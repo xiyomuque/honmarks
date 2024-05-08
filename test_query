@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+# Database file path (modify as needed)
+DB_FILE="my_books.db"
+
+# Function to check if sqlite3 command is available
+function check_sqlite3() {
+  if ! command -v sqlite3 &> /dev/null; then
+    echo "Error: sqlite3 command not found. Please install sqlite3."
+    exit 1
+  fi
+}
+
+# Function to execute a SQL query
+function sq_exec() {
+  local sql="$1"
+  sqlite3 "$DB_FILE" <<< "$sql"
+}
+
+# Main program logic
+check_sqlite3
+
+echo "Enter your SQL query (or 'exit' to quit):"
+read -r query
+
+if [[ "$query" == "exit" ]]; then
+    echo "Exiting..."
+    exit 0
+fi
+
+sq_exec "$query"
