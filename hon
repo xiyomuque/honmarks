@@ -135,15 +135,56 @@ case "$1" in
       echo "You are currently on page ${bold}$current_page${normal} of ${bold}$book_name${normal}."
     fi
     ;;
-  # Display your library with progress information
-  "l")
+  # Show your library with progress information
+  "s")
     output=$(sq_exec "SELECT id, title, current_page, total_pages FROM books ORDER BY id ASC;")
     while IFS='|' read -r id title current_page total_pages; do
       percent=$(echo "scale=2; 100 * $current_page / $total_pages" | bc)
       echo "${bold}$title${normal} (Page ${bold}$current_page/$total_pages${normal} - ${bold}$percent%${normal} read)"
     done <<< "$output"  # Redirect captured output to the loop
     ;;
+  # Open your ebook in zathura
+  "o")
+    book_name=$(sq_exec "SELECT title FROM books WHERE link IS NOT NULL ORDER BY last_modified DESC;" | fzf -i)
+    if [[ -z "$book_name" ]]; then
+        exit 0
+    fi
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    if [[ -z "$book_id" ]]; then
+        exit 1
+    else
+        book_path=$(sq_exec "SELECT link FROM books WHERE id = $book_id")
+        current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id")
+        if [[ -n "$book_path" ]]; then
+            zathura --page=$current_page "$book_path" &
+        else
+            echo "This book has no book path."
+        fi
+    fi
+    ;;
+  # Link your ebook to a file in computer (using fzf)
+  "l")
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
+    if [[ -z "$book_name" ]]; then
+        exit 0
+    fi
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    if [[ -z "$book_id" ]]; then
+        exit 1
+    else
+        book_path=$(find ~/Downloads ~ ~/Downloads/Telegram\ Desktop -mindepth 1 -maxdepth 1 -type f | fzf -i)
+        if [[ -z $book_path ]]; then
+            exit 0
+        else
+            if sq_exec "UPDATE books SET link = '$book_path' WHERE id = $book_id;"; then
+                echo "Book path to ${bold}$book_name${normal} updated successfully!"
+            else
+                echo "Error!"
+            fi
+        fi
+    fi
+    ;;
   *)
-      echo "Invalid argument. Usage: hon (a(add a book)|b(update a bookmark)|c(complete the book)|f(find current bookmark for the book)|l(display your library)"
+    echo "Invalid argument. Type 'hon h' to see valid arguments."
     ;;
 esac
