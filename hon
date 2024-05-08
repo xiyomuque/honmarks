@@ -73,7 +73,7 @@ case "$1" in
       echo "$book_name has been dropped from library!"
     fi
     ;;
-  # Complete book (set current page to total pages) using fzf
+  # Complete book (using fzf)
   "c")
     book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
