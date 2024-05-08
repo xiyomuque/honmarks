@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 script_dir=$(dirname "$0")
+bold=$(tput bold)
+normal=$(tput sgr0)
 
 # Database file path (modify as needed)
 DB_FILE="$script_dir/my_books.db"
@@ -34,7 +36,7 @@ case "$1" in
     ;;
   # Set a bookmark for the book (using fzf)
   "b")
-    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY current_page DESC;" | fzf -i)
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
     current_page=$(sq_exec "SELECT current_page FROM books WHERE title = '$book_name';" | awk '{print $1}')
     if [[ ! -z "$book_id" ]]; then
@@ -84,11 +86,11 @@ case "$1" in
     ;;
   # Find book and show current page using fzf
   "f")
-    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY current_page DESC;" | fzf -i)
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name';" | awk '{print $1}')
     if [[ ! -z "$book_id" ]]; then
       current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id;")
-      echo "You are currently on page $current_page of $book_name."
+      echo "You are currently on page ${bold}$current_page${normal} of ${bold}$book_name${normal}."
     fi
     ;;
   # Display your library with progress information
