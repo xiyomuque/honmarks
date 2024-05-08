@@ -44,7 +44,7 @@ case "$1" in
     sq_exec "INSERT INTO books (title, total_pages, current_page) VALUES ('$title', $total_pages, $current_page);"
     book_id=$(sq_exec "SELECT seq FROM sqlite_sequence WHERE name='books';")
     sq_exec "UPDATE books SET last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;"
-    echo "Book '$title' added!"
+    echo "Book ${bold}$title${normal} with ${bold}$total_pages${normal} pages added!"
     ;;
   # Set a bookmark for the book (using fzf)
   "b")
@@ -54,21 +54,21 @@ case "$1" in
     fi
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
     current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id;")
-    current_page=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
+    total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
     if [[ ! -z "$book_id" ]]; then
       read -p "New Current Page: " new_page
       if [[ $new_page -lt $current_page ]] || [[ $new_page -ge $total_pages ]] ; then
         read -p "You're setting the bookmark weird. Are you sure you want to continue? (y/N): " confirmation
         if [[ "$confirmation" =~ ^[Yy]$ ]]; then
-      :
+          :
         else
           exit 0
         fi
       else
-          :
+        :
       fi
       sq_exec "UPDATE books SET current_page = $new_page, last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;"
-      echo "Current page for $book_name updated!"
+      echo "Current page for ${bold}$book_name${normal} updated - ${bold}$new_page${normal}!"
     fi
     ;;
   # Delete a book (using fzf)
@@ -86,19 +86,19 @@ case "$1" in
         exit 0
       fi
       sq_exec "DELETE FROM books WHERE id = $book_id;"
-      echo "$book_name has been dropped from library!"
+      echo "${bold}$book_name${normal} has been dropped from library!"
     fi
     ;;
   # Complete book (using fzf)
   "c")
-    book_name=$(sq_exec "SELECT title FROM books;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
     if [[ ! -z "$book_id" ]]; then
       sq_exec "UPDATE books SET current_page = total_pages WHERE id = $book_id;"
-      echo "$book_name is finished!"
+      echo "${bold}$book_name${normal} is finished!"
     fi
     ;;
   # Find book and show current page using fzf
@@ -118,7 +118,7 @@ case "$1" in
     output=$(sq_exec "SELECT id, title, current_page, total_pages FROM books ORDER BY id ASC;")
     while IFS='|' read -r id title current_page total_pages; do
       percent=$(echo "scale=2; 100 * $current_page / $total_pages" | bc)
-      echo "$title (Page $current_page/$total_pages - $percent% read)"
+      echo "${bold}$title${normal} (Page ${bold}$current_page/$total_pages${normal} - ${bold}$percent%${normal} read)"
     done <<< "$output"  # Redirect captured output to the loop
     ;;
   *)
