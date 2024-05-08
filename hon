@@ -19,6 +19,12 @@ function check_sqlite3() {
 function sq_exec() {
   local sql="$1"
   sqlite3 "$DB_FILE" <<< "$sql"
+  # Check the exit code and return true/false accordingly
+  if [ $? -eq 0 ]; then
+    return 0  # Success
+  else
+    return 1  # Failure
+  fi
 }
 
 # Main program logic
@@ -41,10 +47,14 @@ case "$1" in
     else
       :
     fi
-    sq_exec "INSERT INTO books (title, total_pages, current_page) VALUES ('$title', $total_pages, $current_page);"
+    if sq_exec "INSERT INTO books (title, total_pages, current_page) VALUES ('$title', $total_pages, $current_page);" 2>/dev/null; then
+      echo "Book ${bold}$title${normal} with ${bold}$total_pages${normal} pages added!"
+    else
+      echo "Error!"
+      exit 1
+    fi
     book_id=$(sq_exec "SELECT seq FROM sqlite_sequence WHERE name='books';")
     sq_exec "UPDATE books SET last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;"
-    echo "Book ${bold}$title${normal} with ${bold}$total_pages${normal} pages added!"
     ;;
   # Set a bookmark for the book (using fzf)
   "b")
@@ -67,8 +77,12 @@ case "$1" in
       else
         :
       fi
-      sq_exec "UPDATE books SET current_page = $new_page, last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;"
-      echo "Current page for ${bold}$book_name${normal} updated - ${bold}$new_page${normal}!"
+      if sq_exec "UPDATE books SET current_page = $new_page, last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;" 2>/dev/null; then
+        echo "Current page for ${bold}$book_name${normal} updated - ${bold}$new_page${normal}!"
+      else
+        echo "Error!"
+        exit 1
+      fi
     fi
     ;;
   # Delete a book (using fzf)
@@ -85,8 +99,12 @@ case "$1" in
       else
         exit 0
       fi
-      sq_exec "DELETE FROM books WHERE id = $book_id;"
-      echo "${bold}$book_name${normal} has been dropped from library!"
+      if sq_exec "DELETE FROM books WHERE id = $book_id;" 2>/dev/null; then
+        echo "${bold}$book_name${normal} has been dropped from library!"
+      else
+        echo "Error!"
+        exit 1
+      fi
     fi
     ;;
   # Complete book (using fzf)
@@ -97,8 +115,12 @@ case "$1" in
     fi
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
     if [[ ! -z "$book_id" ]]; then
-      sq_exec "UPDATE books SET current_page = total_pages WHERE id = $book_id;"
-      echo "${bold}$book_name${normal} is finished!"
+      if sq_exec "UPDATE books SET current_page = total_pages WHERE id = $book_id;" 2>/dev/null; then
+        echo "${bold}$book_name${normal} is finished!"
+      else
+        echo "Error!"
+        exit 1
+      fi
     fi
     ;;
   # Find book and show current page using fzf
