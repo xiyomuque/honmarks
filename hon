@@ -86,7 +86,7 @@ case "$1" in
     fi
     ;;
   # Delete a book (using fzf)
-  "dd")
+  "d")
     book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
     if [[ -z "$book_name" ]]; then
         exit 0
@@ -155,8 +155,27 @@ case "$1" in
     else
         book_path=$(sq_exec "SELECT link FROM books WHERE id = $book_id")
         current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id")
+        total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
         if [[ -n "$book_path" ]]; then
             zathura --page=$current_page "$book_path" &
+            wait $!
+            read -p "New Current Page: " new_page
+            if [[ $new_page -lt $current_page ]] || [[ $new_page -ge $total_pages ]] ; then
+                read -p "You're setting the bookmark weird. Are you sure you want to continue? (y/N): " confirmation
+                if [[ "$confirmation" =~ ^[Yy]$ ]]; then
+                    :
+                else
+                    exit 0
+                fi
+            else
+                :
+            fi
+            if sq_exec "UPDATE books SET current_page = $new_page, last_modified = DATETIME('now', 'localtime') WHERE id = $book_id;" 2>/dev/null; then
+                echo "Current page for ${bold}$book_name${normal} updated - ${bold}$new_page${normal}!"
+            else
+                echo "Error!"
+                exit 1
+            fi
         else
             echo "This book has no book path."
         fi
@@ -182,6 +201,21 @@ case "$1" in
                 echo "Error!"
             fi
         fi
+    fi
+    ;;
+  # Rename book in the database
+  "r")
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
+    if [[ -z "$book_name" ]]; then
+        exit 0
+    fi
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    read -p "New Book Title: " new_title
+    if sq_exec "UPDATE books SET title = '$new_title' WHERE id = $book_id;" 2>/dev/null; then
+      echo "The title for book ${bold}$book_name${normal} updated - ${bold}$new_title${normal}!"
+    else
+      echo "Error!"
+      exit 1
     fi
     ;;
   *)
