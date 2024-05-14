@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 
 script_dir=$(dirname "$0")
+home_dir="$HOME"
 bold=$(tput bold)
 normal=$(tput sgr0)
+window_id=$(yabai -m query --windows --window | jq -r '.id')
+session_name=$(tmux display-message -p '#S' 2>/dev/null)
+session_window=$(tmux display-message -p '#I' 2>/dev/null)
+session_pane=$(tmux display-message -p '#P' 2>/dev/null)
+transliterate="$script_dir/trans.py"
+detransliterate="$script_dir/detrans.py"
 
 # Database file path (modify as needed)
 DB_FILE="$script_dir/my_books.db"
+DB_FILE2="$home_dir/.local/share/zathura/bookmarks.sqlite"
 
 # Function to check if sqlite3 command is available
 function check_sqlite3() {
@@ -27,10 +35,37 @@ function sq_exec() {
   fi
 }
 
+# Function to execute a SQL query
+function sq_exec2() {
+  local sql="$1"
+  sqlite3 "$DB_FILE2" <<< "$sql"
+  # Check the exit code and return true/false accordingly
+  if [ $? -eq 0 ]; then
+    return 0  # Success
+  else
+    return 1  # Failure
+  fi
+}
+
+function interactive() {
+  # Prompt the user for input
+  read -n 1 -s userInput
+  # Check if user pressed Enter (empty input)
+  if [[ -z "$userInput" ]]; then
+    exit 0
+  else
+    "$0" "$userInput"
+    exit 0
+  fi
+}
+
 # Main program logic
 check_sqlite3
 
 case "$1" in
+  "")
+    interactive
+    ;;
   # Add book with current page
   "a")
     read -p "Book Title: " title
@@ -64,11 +99,13 @@ case "$1" in
     ;;
   # Set a bookmark for the book (using fzf)
   "b")
-    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | $transliterate | fzf -i)
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
-    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    book_name2=$(echo "$book_name" | $detransliterate)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' OR title = '$book_name2' ORDER BY last_modified DESC;" | head -n 1)
+    book_name=$(sq_exec "SELECT title FROM books WHERE id = $book_id;")
     current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id;")
     total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
     if [[ ! -z "$book_id" ]]; then
@@ -134,11 +171,13 @@ case "$1" in
     ;;
   # Find book and show current page using fzf
   "f")
-    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books ORDER BY last_modified DESC;" | $transliterate | fzf -i)
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
-    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    book_name2=$(echo "$book_name" | $detransliterate)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' OR title = '$book_name2' ORDER BY last_modified DESC;" | head -n 1)
+    book_name=$(sq_exec "SELECT title FROM books WHERE id = $book_id;")
     if [[ ! -z "$book_id" ]]; then
       current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id;")
       echo "You are currently on page ${bold}$current_page${normal} of ${bold}$book_name${normal}."
@@ -154,11 +193,13 @@ case "$1" in
     ;;
   # Open your ebook in zathura
   "o")
-    book_name=$(sq_exec "SELECT title FROM books WHERE link IS NOT NULL ORDER BY last_modified DESC;" | fzf -i)
+    book_name=$(sq_exec "SELECT title FROM books WHERE link IS NOT NULL ORDER BY last_modified DESC;" | $transliterate | fzf -i)
+    book_name2=$(echo "$book_name" | $detransliterate)
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
     book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    book_name=$(sq_exec "SELECT title FROM books WHERE id = $book_id;")
     if [[ -z "$book_id" ]]; then
         exit 1
     else
@@ -166,9 +207,12 @@ case "$1" in
         current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id")
         total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
         if [[ -n "$book_path" ]]; then
-            zathura --page=$current_page "$book_path" &
+            zathura --page=$current_page "$book_path" 1>&2 2>/dev/null &
             wait $!
-            read -p "New Current Page: " new_page
+            yabai -m window --focus $window_id
+            tmux switch-client -t $session_name:$session_window 2>/dev/null || tmux attach -t $session_name:$session_window 2>/dev/null
+            # read -p "New Current Page: " new_page
+            new_page=$(sq_exec2 "SELECT page FROM fileinfo WHERE file = '$book_path'") 
             if [[ -z $new_page ]]; then
                 exit 0
             fi
@@ -207,7 +251,8 @@ case "$1" in
         if [[ -z $book_path ]]; then
             exit 0
         else
-            if sq_exec "UPDATE books SET link = '$book_path' WHERE id = $book_id;"; then
+            book_pages=$(pdfinfo "$book_path" | awk '/Pages/{print $2}')
+            if sq_exec "UPDATE books SET link = '$book_path', total_pages = $book_pages WHERE id = $book_id;"; then
                 echo "Book path to ${bold}$book_name${normal} updated successfully!"
             else
                 echo "Error!"
@@ -234,6 +279,6 @@ case "$1" in
     fi
     ;;
   *)
-    echo "Invalid argument. Type 'hon h' to see valid arguments."
+    exit 0
     ;;
 esac
