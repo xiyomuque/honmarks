@@ -83,7 +83,7 @@ case "$1" in
     fi
     read -p "Current Page (default 0): " current_page
     current_page=${current_page:-0}
-    if [[ $current_page -ge $total_pages ]]; then
+    if [[ $current_page -ge $total_pages ]] ; then
       read -p "You're setting the current page weird. Are you sure you want to continue? (y/N): " confirmation
       if [[ "$confirmation" =~ ^[Yy]$ ]]; then
         :
@@ -118,7 +118,7 @@ case "$1" in
       if [[ -z $new_page ]]; then
           exit 0
       fi
-      if [[ $new_page -ge $current_page ]] || [[ $new_page -gt $total_pages ]] ; then
+      if [[ $new_page -lt $current_page ]] || [[ $new_page -ge $total_pages ]] ; then
         read -p "You're setting the bookmark weird. Are you sure you want to continue? (y/N): " confirmation
         if [[ "$confirmation" =~ ^[Yy]$ ]]; then
           :
@@ -203,11 +203,11 @@ case "$1" in
     if [[ -z "$book_name" ]]; then
         exit 0
     fi
-    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' OR title = '$book_name2' ORDER BY last_modified DESC;" | head -n 1)
+    book_id=$(sq_exec "SELECT id FROM books WHERE title = '$book_name' ORDER BY last_modified DESC;" | head -n 1)
+    book_name=$(sq_exec "SELECT title FROM books WHERE id = $book_id;")
     if [[ -z "$book_id" ]]; then
         exit 1
     else
-        book_name=$(sq_exec "SELECT title FROM books WHERE id = $book_id;")
         book_path=$(sq_exec "SELECT link FROM books WHERE id = $book_id")
         current_page=$(sq_exec "SELECT current_page FROM books WHERE id = $book_id")
         total_pages=$(sq_exec "SELECT total_pages FROM books WHERE id = $book_id;")
@@ -252,7 +252,7 @@ case "$1" in
     if [[ -z "$book_id" ]]; then
         exit 1
     else
-        book_path=$(find ~/Downloads ~ ~/Downloads/Telegram\ Desktop -mindepth 1 -maxdepth 2 -type f -name "*.pdf" | fzf -i)
+        book_path=$(find ~/Downloads ~ ~/Downloads/Telegram\ Desktop -mindepth 1 -maxdepth 1 -type f | fzf -i)
         if [[ -z $book_path ]]; then
             exit 0
         else
